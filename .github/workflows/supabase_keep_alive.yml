@@ -2,28 +2,85 @@ name: Supabase Keep Alive
 
 on:
   schedule:
-    # Runs every 3 days at 08:00 UTC
-    - cron: '0 8 */3 * *'
-  workflow_dispatch: # Allows manual triggering
+    - cron: '0 8 */3 * *'   # Every 3 days at 08:00 UTC
+    - cron: '0 20 */3 * *'  # Every 3 days at 20:00 UTC (double ping)
+  workflow_dispatch:
 
 jobs:
   keep-alive:
-    name: Ping Supabase to prevent pausing
+    name: Ping Supabase with real DB activity
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ping Supabase REST API
+      - name: 🛒 Query products table
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+          RESPONSE=$(curl -s -o /tmp/products.json -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/product?select=id,title,price&limit=5" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Products query status: $RESPONSE"
+          cat /tmp/products.json
+          [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ] && echo "✅ Products OK" || (echo "❌ Products failed" && exit 1)
 
-          echo "Response status: $RESPONSE"
+      - name: 🗂️ Query categories table
+        run: |
+          RESPONSE=$(curl -s -o /tmp/categories.json -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/category?select=id,name,slug&limit=5" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Categories query status: $RESPONSE"
+          cat /tmp/categories.json
+          [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ] && echo "✅ Categories OK" || (echo "❌ Categories failed" && exit 1)
 
-          if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ]; then
-            echo "✅ Supabase is alive and responding!"
-          else
-            echo "⚠️ Unexpected response: $RESPONSE"
-            exit 1
-          fi
+      - name: 📦 Query orders table
+        run: |
+          RESPONSE=$(curl -s -o /tmp/orders.json -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/order?select=id,status,totalPrice&limit=5&order=created_at.desc" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Orders query status: $RESPONSE"
+          cat /tmp/orders.json
+          [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ] && echo "✅ Orders OK" || (echo "❌ Orders failed" && exit 1)
+
+      - name: 🧩 Query order_items table
+        run: |
+          RESPONSE=$(curl -s -o /tmp/order_items.json -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/order_item?select=id,quantity,product,order&limit=5" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Order items query status: $RESPONSE"
+          cat /tmp/order_items.json
+          [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ] && echo "✅ Order Items OK" || (echo "❌ Order Items failed" && exit 1)
+
+      - name: 👥 Query users table
+        run: |
+          RESPONSE=$(curl -s -o /tmp/users.json -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/users?select=id,email,type&limit=5" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Users query status: $RESPONSE"
+          cat /tmp/users.json
+          [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ] && echo "✅ Users OK" || (echo "❌ Users failed" && exit 1)
+
+      - name: 🔗 Query products with category JOIN
+        run: |
+          RESPONSE=$(curl -s -o /tmp/products_join.json -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/product?select=id,title,price,category(id,name,slug)&limit=5" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Products+Category JOIN status: $RESPONSE"
+          cat /tmp/products_join.json
+          [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ] && echo "✅ JOIN query OK" || (echo "❌ JOIN query failed" && exit 1)
+
+      - name: 📊 Summary
+        run: |
+          echo "========================================="
+          echo "✅ All Supabase tables queried successfully"
+          echo "🕐 Timestamp: $(date -u)"
+          echo "========================================="

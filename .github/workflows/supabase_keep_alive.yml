@@ -1,0 +1,29 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Runs every 3 days at 08:00 UTC
+    - cron: '0 8 */3 * *'
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  keep-alive:
+    name: Ping Supabase to prevent pausing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "Response status: $RESPONSE"
+
+          if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ]; then
+            echo "✅ Supabase is alive and responding!"
+          else
+            echo "⚠️ Unexpected response: $RESPONSE"
+            exit 1
+          fi

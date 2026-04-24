@@ -10,8 +10,19 @@ jobs:
   keep-alive:
     name: Ping Supabase with real DB activity
     runs-on: ubuntu-latest
+    
+    # 👇 CRITICAL: This gives permission to keep GitHub Actions alive
+    permissions:
+      actions: write  # Required for the keepalive action
 
     steps:
+      # 🔥 NEW STEP: Prevents GitHub from disabling this workflow after 60 days
+      - name: 🔄 Keep GitHub Actions Alive
+        uses: liskin/gh-workflow-keepalive@v1
+        with:
+          # Optional: Set to 'false' if you don't want debug logs
+          debug: false
+
       - name: 🛒 Query products table
         run: |
           RESPONSE=$(curl -s -o /tmp/products.json -w "%{http_code}" \
